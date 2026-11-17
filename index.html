@@ -89,6 +89,51 @@ body {
 	text-align: center;
 	z-index: 1;
 }
+
+/* 로딩 화면 = 타이틀 화면. 같은 그림 위에 진행 막대가 차고, 다 차면 그 자리에 게임의 "시작하기" 단추가 나타난다. */
+:root { --u: min(100vw, 56.25vh); }
+#status {
+	background: #101a2b url(index.title.jpg) center / cover no-repeat !important;
+	z-index: 5;
+}
+#status-splash, #status-progress { display: none !important; }
+#rotg-shade {
+	position: absolute; left: 0; right: 0; bottom: 0;
+	height: calc(var(--u) * 0.56);
+	background: linear-gradient(rgba(5, 8, 15, 0), rgba(5, 8, 15, 0.86));
+}
+#rotg-logo {
+	position: absolute;
+	left: calc(50% - var(--u) * 0.3417);
+	width: calc(var(--u) * 0.7435);
+	top: calc(8.28% - var(--u) * 0.1389);
+	height: calc(var(--u) * 0.4556);
+	object-fit: contain;
+}
+#rotg-bar {
+	position: absolute; left: 50%; transform: translateX(-50%);
+	bottom: calc(var(--u) * 0.1204);
+	width: calc(var(--u) * 0.5); height: calc(var(--u) * 0.1111);
+	box-sizing: border-box;
+	border: calc(var(--u) * 0.0037) solid #fff3c4;
+	border-radius: calc(var(--u) * 0.024);
+	background: rgba(23, 43, 64, 0.94);
+	overflow: hidden;
+	box-shadow: 0 0 calc(var(--u) * 0.01) rgba(5, 8, 15, 0.6);
+}
+#rotg-fill {
+	position: absolute; left: 0; top: 0; bottom: 0; width: 0;
+	background: linear-gradient(#f3d58c, #d9ac4f);
+	transition: width 0.2s linear;
+}
+#rotg-text {
+	position: absolute; left: 0; right: 0; top: 0; bottom: 0;
+	display: flex; align-items: center; justify-content: center;
+	color: #fff9e9; font-weight: 700;
+	font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+	font-size: calc(var(--u) * 0.036);
+	text-shadow: 0 0 4px #0a1220, 0 1px 2px #0a1220, 0 0 8px #0a1220;
+}
 		</style>
 		<link id="-gd-engine-icon" rel="icon" type="image/png" href="index.icon.png" />
 <link rel="apple-touch-icon" href="index.apple-touch-icon.png"/>
@@ -105,13 +150,45 @@ body {
 
 		<div id="status">
 			<img id="status-splash" class="show-image--true fullsize--true use-filter--true" src="index.png" alt="">
+			<div id="rotg-shade"></div>
+			<img id="rotg-logo" src="index.logo.ko.png" alt="">
+			<div id="rotg-bar"><div id="rotg-fill"></div><div id="rotg-text"></div></div>
 			<progress id="status-progress"></progress>
 			<div id="status-notice"></div>
 		</div>
 
+		<script>
+(function () {
+	var ko = (navigator.language || '').toLowerCase().indexOf('ko') === 0;
+	if (!ko) { document.getElementById('rotg-logo').src = 'index.logo.en.png'; }
+	var text = document.getElementById('rotg-text');
+	var fill = document.getElementById('rotg-fill');
+	var words = ko ? ['불러오는 중', '준비하는 중…'] : ['Loading', 'Getting ready…'];
+	text.textContent = words[0] + '…';
+	window.rotgProgress = function (current, total) {
+		if (current > 0 && total > 0) {
+			var percent = Math.min(100, Math.floor(current * 100 / total));
+			fill.style.width = percent + '%';
+			text.textContent = percent >= 100 ? words[1] : words[0] + ' ' + percent + '%';
+		}
+	};
+	// 게임이 타이틀을 다 그렸다고 알려 오면(rotgTitleReady) 그때 로딩 화면을 걷는다. 소식이 없으면 8초 뒤에 걷는다.
+	var hide = null;
+	var shown = false;
+	function tryHide() { if (hide && shown) { var run = hide; hide = null; run(); } }
+	window.rotgTitleReady = function () { shown = true; tryHide(); };
+	window.rotgStarted = function (callback) {
+		hide = callback;
+		fill.style.width = '100%';
+		text.textContent = words[1];
+		tryHide();
+		setTimeout(function () { shown = true; tryHide(); }, 8000);
+	};
+}());
+		</script>
 		<script src="index.js"></script>
 		<script>
-const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":true,"fileSizes":{"index.pck":87294688,"index.wasm":39513091},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":true,"fileSizes":{"index.pck":87317164,"index.wasm":39513091},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
 const GODOT_THREADS_ENABLED = false;
 const engine = new Engine(GODOT_CONFIG);
 
@@ -201,6 +278,7 @@ const engine = new Engine(GODOT_CONFIG);
 		setStatusMode('progress');
 		engine.startGame({
 			'onProgress': function (current, total) {
+				window.rotgProgress(current, total);
 				if (current > 0 && total > 0) {
 					statusProgress.value = current;
 					statusProgress.max = total;
@@ -210,7 +288,7 @@ const engine = new Engine(GODOT_CONFIG);
 				}
 			},
 		}).then(() => {
-			setStatusMode('hidden');
+			window.rotgStarted(function () { setStatusMode('hidden'); });
 		}, displayFailureNotice);
 	}
 }());
